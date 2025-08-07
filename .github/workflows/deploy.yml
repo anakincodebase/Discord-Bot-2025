@@ -2,99 +2,44 @@ name: Deploy UnderLand Bot
 
 on:
   push:
-    branches: [ main, deploy ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
+    branches:
+      - main
+  workflow_dispatch:  # Allows manual re-runs from GitHub Actions UI
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🚀 Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python
-        uses: actions/setup-python@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 📦 Cache Dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements_deployment.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: 🔧 Install Dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements_deployment.txt
+          pip install -r requirements.txt
 
-      - name: 🧪 Run Tests (if any)
+      - name: Create .env file
         run: |
-          echo "✅ Tests passed - Add your test commands here if needed"
+          cat <<EOF > .env
+          DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
+          WELCOME_CHANNEL_ID=${{ secrets.WELCOME_CHANNEL_ID }}
+          OWNER_ID=${{ secrets.OWNER_ID }}
+          ENVIRONMENT=production
+          EOF
 
-      - name: ✅ Validate Bot Configuration
-        run: |
-          python -c "
-          import sys
-          sys.path.append('.')
-          try:
-              from bot.config_deployment import DeploymentConfig
-              config = DeploymentConfig()
-              print('✅ Configuration validated successfully')
-          except Exception as e:
-              print(f'❌ Configuration error: {e}')
-              sys.exit(1)
-          "
+      - name: Deploy UnderLand Bot
+        run: python run_deployment.py
 
-      - name: 🔐 Check Environment Variables
-        run: |
-          echo "Checking environment variables..."
-          if [ -z "${{ secrets.DISCORD_TOKEN }}" ]; then
-            echo "❌ DISCORD_TOKEN secret is not set"
-            exit 1
-          else
-            echo "✅ DISCORD_TOKEN is configured"
-          fi
+      - name: Clean up environment file
+        if: always()
+        run: rm -f .env
 
-      - name: 🚀 Deploy Bot (24/7 Mode)
-        env:
-          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-          ENVIRONMENT: production
-          OWNER_IDS: ${{ secrets.OWNER_IDS }}
-          WELCOME_CHANNEL_ID: ${{ secrets.WELCOME_CHANNEL_ID }}
-        run: |
-          echo "🌟 Starting UnderLand Bot deployment..."
-          echo "📊 Mode: 24/7 Cloud Deployment"
-          echo "⚡ Features: Games, Social, Utilities, Moderation"
-          echo "🔒 Environment variables configured"
 
-          python run_deployment.py
-
-      - name: 📝 Deployment Summary
-        run: |
-          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Dependencies installed successfully" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Configuration validated" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Environment variables configured" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Bot deployment script executed" >> $GITHUB_STEP_SUMMARY
-          echo "- 🎯 Ready for 24/7 cloud hosting" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🎮 Features Included:" >> $GITHUB_STEP_SUMMARY
-          echo "- 🎮 Interactive Games (Hangman, Trivia, TicTacToe)" >> $GITHUB_STEP_SUMMARY
-          echo "- 😄 Social Commands (Bonk, Hug, Kiss, etc.)" >> $GITHUB_STEP_SUMMARY
-          echo "- 📚 Dictionary & Learning Tools" >> $GITHUB_STEP_SUMMARY
-          echo "- ⏱️ Productivity Features (Pomodoro)" >> $GITHUB_STEP_SUMMARY
-          echo "- 🛠️ Moderation Tools" >> $GITHUB_STEP_SUMMARY
-          echo "- 🎭 Script Sessions" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔑 Required Secrets:" >> $GITHUB_STEP_SUMMARY
-          echo "- \`DISCORD_TOKEN\` (Required)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`OWNER_IDS\` (Optional)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`WELCOME_CHANNEL_ID\` (Optional)" >> $GITHUB_STEP_SUMMARY
 
 
