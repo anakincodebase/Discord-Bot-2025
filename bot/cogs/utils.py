@@ -12,7 +12,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.helpers.llm_chat import generate_response
+# Removed llm_chat import for deployment version without AI dependencies
 
 logger = logging.getLogger(__name__)
 
@@ -249,21 +249,22 @@ class UtilsCog(commands.Cog):
         
         await ctx.send(embed=embed)
 
-    @commands.command(name="ask")
-    async def ask(self, ctx, *, message: str):
-        """Chat with the AI assistant."""
-        async with ctx.typing():
-            try:
-                response = generate_response(
-                    message, 
-                    str(ctx.channel.id), 
-                    str(ctx.author.id), 
-                    ctx.author.name
-                )
-                await ctx.send(response)
-            except Exception as e:
-                logger.error(f"Error in AI chat: {e}")
-                await ctx.send("Sorry, I'm having trouble thinking right now. Try again later!")
+    # Disabled for deployment version - requires AI dependencies
+    # @commands.command(name="ask")
+    # async def ask(self, ctx, *, message: str):
+    #     """Chat with the AI assistant."""
+    #     async with ctx.typing():
+    #         try:
+    #             response = generate_response(
+    #                 message, 
+    #                 str(ctx.channel.id), 
+    #                 str(ctx.author.id), 
+    #                 ctx.author.name
+    #             )
+    #             await ctx.send(response)
+    #         except Exception as e:
+    #             logger.error(f"Error in AI chat: {e}")
+    #             await ctx.send("Sorry, I'm having trouble thinking right now. Try again later!")
 
     @commands.command(name="say")
     async def say(self, ctx, *, message: str):
