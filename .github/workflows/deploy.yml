@@ -42,7 +42,22 @@ jobs:
           echo "✅ DISCORD_TOKEN is configured"
         fi
 
-    - name: � Create .env file
+    - name: 🧪 Validate Bot Configuration
+      run: |
+        echo "Validating bot configuration..."
+        python -c "
+        import sys
+        sys.path.append('.')
+        try:
+            from bot.config_deployment import DeploymentConfig
+            config = DeploymentConfig()
+            print('✅ Configuration validated successfully')
+        except Exception as e:
+            print(f'❌ Configuration error: {e}')
+            sys.exit(1)
+        "
+
+    - name: 📝 Create .env file
       run: |
         cat <<EOF > .env
         DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
