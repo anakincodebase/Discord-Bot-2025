@@ -1,6 +1,8 @@
-![UnderLand National Flag](Underland_National_Flag.png)
-
 # 🏰 UnderLand Discord Bot - Cloud Deployment Edition
+
+<p align="center">
+  <img src="./Underland_National_Flag.png" alt="UnderLand National Flag" width="600">
+</p>
 
 A lightweight, professional Discord bot optimized for 24/7 cloud deployment. Features games, social commands, utilities, and moderation tools without heavy dependencies.
 
