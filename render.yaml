@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: UnderLand-bot
+    env: python
+    buildCommand: pip install -r requirements_deployment.txt
+    startCommand: python run_deployment.py
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: ENVIRONMENT
+        value: production

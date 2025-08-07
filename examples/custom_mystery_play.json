@@ -1,0 +1,38 @@
+{
+  "title": "The Mystery of the Haunted Manor",
+  "author": "Custom Theater Group",
+  "characters": [
+    {
+      "name": "Lady Margaret Whitmore",
+      "description": "The mysterious lady of the manor, harboring dark secrets"
+    },
+    {
+      "name": "Detective James Crawford",
+      "description": "A seasoned investigator called to solve the mystery"
+    },
+    {
+      "name": "Sarah Mitchell",
+      "description": "The young maid who claims to have seen ghosts"
+    },
+    {
+      "name": "Dr. Edward Blackwell",
+      "description": "The family physician with questionable motives"
+    },
+    {
+      "name": "Thomas Whitmore",
+      "description": "Lady Margaret's troubled nephew and heir"
+    },
+    {
+      "name": "Mrs. Eleanor Hartwell",
+      "description": "The stern housekeeper who knows all the family secrets"
+    },
+    {
+      "name": "Captain Richard Stone",
+      "description": "A family friend and war veteran"
+    },
+    {
+      "name": "The Spirit",
+      "description": "The mysterious ghost haunting the manor (voice only)"
+    }
+  ]
+}
