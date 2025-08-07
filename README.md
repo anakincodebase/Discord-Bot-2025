@@ -44,7 +44,7 @@ A lightweight, professional Discord bot optimized for 24/7 cloud deployment. Fea
 ### Step 1: Repository Setup
 ```bash
 # Clone or download this repository
-git clone <your-repo-url>
+gh repo clone anakincodebase/Discord-Bot-2025
 cd Discord-bot
 ```
 
@@ -176,7 +176,7 @@ MIT License - Free to use and modify for your projects.
 
 ## 👨‍💻 Author
 
-**Afnan Ahmed**
+**Afnan**
 
 ## 🆘 Support
 
@@ -189,3 +189,4 @@ For help and questions:
 
 
 **Ready to deploy! 🚀** Just add your `DISCORD_TOKEN` to GitHub secrets and push to main branch.
+
