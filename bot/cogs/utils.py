@@ -119,19 +119,53 @@ class Dictionary(commands.Cog):
         await self.fetch_definition(interaction, word, is_slash=True)
 
     async def fetch_definition(self, ctx_or_interaction, word: str, is_slash: bool):
-        url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    message = f"<a:Alert:1363632747616407733> Couldn't find a definition for **{word}**."
-                    if is_slash:
-                        await ctx_or_interaction.response.send_message(message, ephemeral=True)
-                    else:
-                        await ctx_or_interaction.send(message)
-                    return
+            # Try primary API first - api.dictionaryapi.dev
+            try:
+                url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
+                async with session.get(url, headers=headers, timeout=10) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        embed = self._create_embed_from_primary_api(word, data)
+                        if embed:
+                            if is_slash:
+                                await ctx_or_interaction.response.send_message(embed=embed)
+                            else:
+                                await ctx_or_interaction.send(embed=embed)
+                            return
+            except Exception as e:
+                logger.error(f"Primary API (dictionaryapi.dev) error: {e}")
 
-                data = await resp.json()
+            # FreeDictionaryAPI.com - now fallback source
+            try:
+                freedict_url = f"https://freedictionaryapi.com/api/v1/entries/en/{word}"
+                async with session.get(freedict_url, headers=headers, timeout=10) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data and 'entries' in data and len(data['entries']) > 0:
+                            embed = self._transform_real_freedictionary_data_enhanced(word, data)
+                            if embed:
+                                if is_slash:
+                                    await ctx_or_interaction.response.send_message(embed=embed)
+                                else:
+                                    await ctx_or_interaction.send(embed=embed)
+                                return
+            except Exception as e:
+                logger.error(f"FreeDictionaryAPI.com parsing error: {e}")
 
+        # If all APIs fail
+        message = f"<a:Alert:1363632747616407733> Couldn't find a definition for **{word}**."
+        if is_slash:
+            await ctx_or_interaction.response.send_message(message, ephemeral=True)
+        else:
+            await ctx_or_interaction.send(message)
+
+    def _create_embed_from_primary_api(self, word: str, data):
+        """Create embed from primary API (dictionaryapi.dev) response."""
         try:
             entry = data[0]
             meanings = entry['meanings']
@@ -173,21 +207,78 @@ class Dictionary(commands.Cog):
                 )
 
             embed.set_footer(
+                text="Powered by anakincodebase • Source: DictionaryAPI.dev",
+                icon_url="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+            )
+
+            return embed
+        except Exception as e:
+            logger.error(f"Error creating embed from primary API: {e}")
+            return None
+
+    def _transform_real_freedictionary_data_enhanced(self, word: str, data):
+        """Transform FreeDictionaryAPI.com response to Discord embed."""
+        try:
+            if not data or 'entries' not in data or len(data['entries']) == 0:
+                return None
+
+            entry = data['entries'][0]
+            
+            # Extract phonetics/pronunciation
+            pronunciation = "N/A"
+            audio_url = None
+            if 'phonetics' in entry and len(entry['phonetics']) > 0:
+                phonetic = entry['phonetics'][0]
+                pronunciation = phonetic.get('text', 'N/A')
+                audio_url = phonetic.get('audio')
+
+            embed = discord.Embed(
+                title=f"📘 Definition of '{word}'",
+                description=f"**Pronunciation:** `{pronunciation}`",
+                color=discord.Color.green(),
+                timestamp=discord.utils.utcnow()
+            )
+            embed.set_author(
+                name="UnderLand Dictionary",
+                icon_url="https://cdn-icons-png.flaticon.com/512/15585/15585721.png"
+            )
+            embed.set_thumbnail(
+                url="https://cdn-icons-png.flaticon.com/512/15585/15585721.png"
+            )
+
+            # Extract meanings
+            if 'meanings' in entry:
+                meanings = entry['meanings'][:3]  # Limit to 3 meanings
+                for meaning in meanings:
+                    part_of_speech = meaning.get("partOfSpeech", "N/A")
+                    definitions = meaning.get("definitions", [])
+                    
+                    if definitions:
+                        definition_text = definitions[0].get("definition", "N/A")
+                        example = definitions[0].get("example", "No example provided.")
+
+                        embed.add_field(
+                            name=f"🔹 {part_of_speech.capitalize()}",
+                            value=f"**Definition:** {definition_text}\\n**Example:** _{example}_",
+                            inline=False
+                        )
+
+            if audio_url:
+                embed.add_field(
+                    name="🔊 Pronunciation Audio",
+                    value=f"[Click here to listen]({audio_url})",
+                    inline=False
+                )
+
+            embed.set_footer(
                 text="Powered by anakincodebase",
                 icon_url="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
             )
 
-            if is_slash:
-                await ctx_or_interaction.response.send_message(embed=embed)
-            else:
-                await ctx_or_interaction.send(embed=embed)
-
+            return embed
         except Exception as e:
-            error_msg = f"<a:Alert:1363632747616407733> Error fetching definition: {e}"
-            if is_slash:
-                await ctx_or_interaction.response.send_message(error_msg, ephemeral=True)
-            else:
-                await ctx_or_interaction.send(error_msg)
+            logger.error(f"Error transforming: {e}")
+            return None
 
 class UtilsCog(commands.Cog):
     """Utility commands cog."""
