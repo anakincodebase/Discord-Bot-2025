@@ -571,11 +571,15 @@ class Dictionary(commands.Cog):
     async def fetch_definition(self, ctx_or_interaction, word: str, is_slash: bool):
         """Fetch definition using ONLY FreeDictionaryAPI.com - Clean & Simple."""
 
+        # Store original word for display, convert to lowercase for API calls
+        original_word = word.strip()
+        word = word.lower().strip()
+
         definition_data = await self._try_freedictionary_api_only(word)
         
         # If no definition found, send error message
         if not definition_data:
-            message = f"<a:Alert:1363632747616407733> Couldn't find a definition for **{word}** in UnderLand Dictionary. Try checking the spelling or using a different word."
+            message = f"<a:Alert:1363632747616407733> Couldn't find a definition for **{original_word}** in UnderLand Dictionary. Try checking the spelling or using a different word."
             if is_slash:
                 await ctx_or_interaction.response.send_message(message, ephemeral=True)
             else:
@@ -583,7 +587,7 @@ class Dictionary(commands.Cog):
             return
 
         try:
-            embed = self._create_freedict_embed(word, definition_data)
+            embed = self._create_freedict_embed(original_word, definition_data)
             
             if is_slash:
                 await ctx_or_interaction.response.send_message(embed=embed)
