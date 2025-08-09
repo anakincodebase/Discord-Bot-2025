@@ -29,6 +29,7 @@ from bot.cogs.utils import UtilsCog, Dictionary
 from bot.cogs.pomodoro import PomodoroCog
 from bot.cogs.enhanced_help_deployment import EnhancedHelpCog
 from bot.cogs.script_session import ScriptSessionCog
+from bot.cogs.grammar_checker import GrammarCheckerCog
 from bot.database.db import init_db
 
 # Setup logging with UTF-8 encoding for cloud deployment
@@ -84,7 +85,8 @@ class UnderLandCloudBot(commands.Bot):
             Dictionary,
             PomodoroCog,
             EnhancedHelpCog,
-            ScriptSessionCog
+            ScriptSessionCog,
+            GrammarCheckerCog
         ]
         
         for cog in deployment_cogs:

@@ -1240,6 +1240,95 @@ class UtilsCog(commands.Cog):
         
         await ctx.send(embed=embed)
 
+    @commands.command(name="grammar", aliases=["spellcheck"])
+    async def grammar_check_quick(self, ctx, *, text: str):
+        """Quick grammar and spell check using LanguageTool API."""
+        if len(text) > 1000:
+            await ctx.send("❌ Text too long! Use `/grammar` command for longer texts with full features.")
+            return
+        
+        async with ctx.typing():
+            # Use LanguageTool API
+            try:
+                async with aiohttp.ClientSession() as session:
+                    headers = {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'User-Agent': 'UnderLand-Grammar-Bot/2025.1 (Quick Check)'
+                    }
+                    
+                    data = {
+                        'text': text,
+                        'language': 'en-US'
+                    }
+                    
+                    async with session.post(
+                        'https://api.languagetool.org/v2/check',
+                        data=data,
+                        headers=headers,
+                        timeout=10
+                    ) as response:
+                        if response.status == 200:
+                            result = await response.json()
+                            matches = result.get('matches', [])
+                            
+                            if not matches:
+                                embed = discord.Embed(
+                                    title="✅ Perfect Text!",
+                                    description="No grammar or spelling issues found.",
+                                    color=discord.Color.green()
+                                )
+                                embed.add_field(
+                                    name="📝 Your Text",
+                                    value=f"```{text}```",
+                                    inline=False
+                                )
+                                embed.set_footer(text="Quick check powered by LanguageTool API")
+                                await ctx.send(embed=embed)
+                                return
+                            
+                            # Show issues found
+                            embed = discord.Embed(
+                                title=f"📝 Grammar Check Results",
+                                description=f"Found {len(matches)} issue(s) in your text.",
+                                color=discord.Color.orange()
+                            )
+                            
+                            # Show first few issues
+                            for i, match in enumerate(matches[:3]):
+                                issue_type = match.get('rule', {}).get('category', {}).get('name', 'Issue')
+                                message = match.get('message', 'No description')
+                                replacements = [r.get('value', '') for r in match.get('replacements', [])]
+                                
+                                field_value = f"**Problem:** {message}\n"
+                                if replacements:
+                                    suggestions = ', '.join(f"`{rep}`" for rep in replacements[:3])
+                                    field_value += f"**Suggestions:** {suggestions}"
+                                
+                                embed.add_field(
+                                    name=f"{i+1}. {issue_type}",
+                                    value=field_value,
+                                    inline=False
+                                )
+                            
+                            if len(matches) > 3:
+                                embed.add_field(
+                                    name="📊 More Issues",
+                                    value=f"...and {len(matches) - 3} more issues. Use `/grammar` for full interactive checking!",
+                                    inline=False
+                                )
+                            
+                            embed.set_footer(text="For detailed checking with corrections, use /grammar command")
+                            await ctx.send(embed=embed)
+                        
+                        else:
+                            await ctx.send(f"❌ Grammar check failed. API returned status {response.status}")
+            
+            except asyncio.TimeoutError:
+                await ctx.send("❌ Grammar check timed out. Please try again.")
+            except Exception as e:
+                logger.error(f"Grammar check error: {e}")
+                await ctx.send("❌ Grammar check failed. Please try again later.")
+
     @commands.Cog.listener()
     async def on_member_join(self, member):
         """Welcome new members."""

@@ -97,11 +97,16 @@ class DeploymentHelpManager:
         education = HelpCategory("Dictionary & Learning", "📚", "Language learning and reference tools")
         education.add_command("def", "Get English word definitions", "?def <word>",
                              ["?def serendipity", "?def happiness"])
-        education.add_command("associate", "Find related words and synonyms", "?associate <word>",
-                             ["?associate happy"])
+        education.add_command("grammar", "Check text for grammar and spelling errors", "?grammar <text>",
+                             ["?grammar This is a test sentence."])
+        education.add_command("quickfix", "Automatically fix grammar errors", "?quickfix <text>",
+                             ["?quickfix I are going to the store"])
+        education.add_command("languages", "Show supported languages for grammar checking", "?languages")
         education.add_feature("🧠 Vocabulary building tools")
         education.add_feature("📖 Dictionary definitions")
-        education.add_feature("🔗 Word associations")
+        education.add_feature("� Grammar and spell checking")
+        education.add_feature("✅ Automatic text correction")
+        education.add_feature("🌍 Multiple language support")
         education.add_feature("📝 Learning assistance")
         self.categories["education"] = education
         
