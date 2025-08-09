@@ -97,62 +97,162 @@ class HangmanView(discord.ui.View):
             await self.message.edit(content="⏰ Game timed out!", view=self)
 
 class TicTacToeButton(discord.ui.Button):
-    """Button for Tic-Tac-Toe game."""
+    """Enhanced button for Tic-Tac-Toe game with improved visuals."""
     
     def __init__(self, position: int):
-        super().__init__(style=discord.ButtonStyle.secondary, label="\\u200b", row=position // 3)
+        # Use position numbers as labels initially for better UX
+        super().__init__(
+            style=discord.ButtonStyle.secondary, 
+            label=str(position + 1),  # Show position numbers 1-9
+            row=position // 3
+        )
         self.position = position
+        self.is_empty = True
 
     async def callback(self, interaction: discord.Interaction):
         view: TicTacToe = self.view
         
+        # Check if it's the correct player's turn
         if interaction.user != view.current_player:
-            await interaction.response.send_message("It's not your turn!", ephemeral=True)
+            await interaction.response.send_message(
+                f"⚠️ It's not your turn! It's {view.current_player.mention}'s turn.", 
+                ephemeral=True
+            )
             return
 
-        if self.label != "\\u200b":
-            await interaction.response.send_message("This cell is already taken.", ephemeral=True)
+        # Check if cell is already taken
+        if not self.is_empty:
+            await interaction.response.send_message(
+                "❌ This cell is already taken! Choose another one.", 
+                ephemeral=True
+            )
             return
 
-        self.label = view.symbols[view.current_player_index]
-        self.style = discord.ButtonStyle.primary if view.current_player_index == 0 else discord.ButtonStyle.success
-        self.disabled = True
-        view.board[self.position] = view.symbols[view.current_player_index]
+        # Make the move
+        current_symbol = view.symbols[view.current_player_index]
+        self.label = current_symbol
+        self.emoji = current_symbol
+        self.style = discord.ButtonStyle.danger if view.current_player_index == 0 else discord.ButtonStyle.success
+        self.is_empty = False
+        view.board[self.position] = current_symbol
         view.move_count += 1
 
-        if view.check_win(view.symbols[view.current_player_index]):
-            for child in view.children:
-                child.disabled = True
-            view.stop()
-            await interaction.response.edit_message(content=f"{view.current_player.mention} wins!", view=view)
+        # Check for win condition
+        if view.check_win(current_symbol):
+            await view.handle_game_end(interaction, "win")
             return
         elif view.move_count >= 9:
-            for child in view.children:
-                child.disabled = True
-            view.stop()
-            await interaction.response.edit_message(content="It's a draw!", view=view)
+            await view.handle_game_end(interaction, "draw")
             return
         else:
+            # Switch to next player
             view.current_player_index = 1 - view.current_player_index
             view.current_player = view.players[view.current_player_index]
-            await interaction.response.edit_message(content=f"It's now {view.current_player.mention}'s turn", view=view)
+            await view.update_game_display(interaction)
+
+class TicTacToeRematchButton(discord.ui.Button):
+    """Button for rematch functionality."""
+    
+    def __init__(self):
+        super().__init__(
+            style=discord.ButtonStyle.primary,
+            label="🔄 Rematch",
+            emoji="🔄"
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        view: TicTacToe = self.view
+        
+        # Only the players can start a rematch
+        if interaction.user not in view.players:
+            await interaction.response.send_message(
+                "❌ Only the players can start a rematch!", 
+                ephemeral=True
+            )
+            return
+        
+        # Start a new game
+        new_view = TicTacToe(view.players[0], view.players[1])
+        new_embed = new_view.create_game_embed()
+        
+        await interaction.response.edit_message(embed=new_embed, view=new_view)
+        new_view.message = interaction.message
 
 class TicTacToe(discord.ui.View):
-    """View for Tic-Tac-Toe game."""
+    """Enhanced Tic-Tac-Toe game with dynamic features and better UX."""
     
     def __init__(self, player1: discord.Member, player2: discord.Member):
-        super().__init__(timeout=120)
+        super().__init__(timeout=300)  # 5 minutes timeout
         self.players = [player1, player2]
         self.symbols = ["❌", "⭕"]
         self.current_player_index = 0
         self.current_player = self.players[0]
         self.board = [None] * 9
         self.move_count = 0
-
+        self.game_over = False
+        self.winner = None
+        self.message = None
+        
+        # Create the 3x3 grid of buttons
         for i in range(9):
             self.add_item(TicTacToeButton(i))
 
+    def create_game_embed(self):
+        """Create a dynamic embed showing current game state."""
+        if self.game_over:
+            if self.winner:
+                title = f"🎉 {self.winner.display_name} Wins!"
+                color = discord.Color.gold()
+                description = f"🏆 **Winner:** {self.winner.mention}\n📊 **Moves:** {self.move_count}"
+            else:
+                title = "🤝 It's a Draw!"
+                color = discord.Color.orange()
+                description = f"🤝 **Result:** Draw\n📊 **Total Moves:** {self.move_count}"
+        else:
+            title = "⭕ Tic-Tac-Toe Game"
+            color = discord.Color.blurple()
+            current_symbol = self.symbols[self.current_player_index]
+            description = (
+                f"🎮 **Players:** {self.players[0].mention} ({self.symbols[0]}) vs {self.players[1].mention} ({self.symbols[1]})\n"
+                f"🎯 **Current Turn:** {self.current_player.mention} ({current_symbol})\n"
+                f"📊 **Move Count:** {self.move_count}/9"
+            )
+        
+        embed = discord.Embed(title=title, description=description, color=color)
+        
+        # Add visual board representation
+        board_visual = self.get_board_visual()
+        embed.add_field(name="📋 Game Board", value=board_visual, inline=False)
+        
+        if not self.game_over:
+            embed.add_field(
+                name="💡 How to Play", 
+                value="Click the numbered buttons to make your move!", 
+                inline=False
+            )
+            embed.set_footer(text="⏱️ Game will timeout in 5 minutes if inactive")
+        else:
+            embed.set_footer(text="🎮 Click rematch to play again!")
+        
+        return embed
+
+    def get_board_visual(self):
+        """Create a visual representation of the board."""
+        visual_board = []
+        for i in range(0, 9, 3):
+            row = []
+            for j in range(3):
+                pos = i + j
+                if self.board[pos]:
+                    row.append(self.board[pos])
+                else:
+                    row.append(f"`{pos + 1}`")
+            visual_board.append(" │ ".join(row))
+        
+        return "\n" + "─" * 13 + "\n" + f"\n{' ' * 4}─────\n".join(visual_board) + "\n" + "─" * 13
+
     def check_win(self, symbol: str):
+        """Check if the given symbol has won the game."""
         b = self.board
         win_combos = [
             (0, 1, 2), (3, 4, 5), (6, 7, 8),  # rows
@@ -161,11 +261,72 @@ class TicTacToe(discord.ui.View):
         ]
         return any(b[a] == b[b_idx] == b[c] == symbol for a, b_idx, c in win_combos)
 
+    async def handle_game_end(self, interaction: discord.Interaction, result: str):
+        """Handle the end of the game with enhanced feedback."""
+        self.game_over = True
+        
+        # Disable all game buttons
+        for child in self.children:
+            if isinstance(child, TicTacToeButton):
+                child.disabled = True
+        
+        if result == "win":
+            self.winner = self.current_player
+            # Highlight winning combination
+            self.highlight_winning_combination()
+        
+        # Add rematch button
+        self.add_item(TicTacToeRematchButton())
+        
+        # Update display
+        embed = self.create_game_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    def highlight_winning_combination(self):
+        """Highlight the winning combination on the board."""
+        if not self.winner:
+            return
+        
+        symbol = self.symbols[self.current_player_index]
+        b = self.board
+        win_combos = [
+            (0, 1, 2), (3, 4, 5), (6, 7, 8),  # rows
+            (0, 3, 6), (1, 4, 7), (2, 5, 8),  # columns
+            (0, 4, 8), (2, 4, 6)              # diagonals
+        ]
+        
+        for combo in win_combos:
+            if all(b[pos] == symbol for pos in combo):
+                for pos in combo:
+                    for child in self.children:
+                        if isinstance(child, TicTacToeButton) and child.position == pos:
+                            child.style = discord.ButtonStyle.primary
+                break
+
+    async def update_game_display(self, interaction: discord.Interaction):
+        """Update the game display with current state."""
+        embed = self.create_game_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
     async def on_timeout(self):
+        """Handle timeout with enhanced feedback."""
+        self.game_over = True
         for child in self.children:
             child.disabled = True
+        
+        embed = discord.Embed(
+            title="⏰ Game Timed Out",
+            description=f"The game between {self.players[0].mention} and {self.players[1].mention} has timed out.",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="📊 Final State", value=f"Moves made: {self.move_count}/9", inline=False)
+        embed.set_footer(text="Start a new game with ?tictactoe @user")
+        
         if self.message:
-            await self.message.edit(content="Game timed out!", view=self)
+            try:
+                await self.message.edit(embed=embed, view=self)
+            except discord.NotFound:
+                pass
 
 class FunCog(commands.Cog):
     """Fun commands and games cog."""
@@ -208,26 +369,77 @@ class FunCog(commands.Cog):
 
     @commands.command(name="tictactoe")
     async def tictactoe(self, ctx, opponent: discord.Member):
-        """Start a Tic-Tac-Toe game."""
+        """Start an enhanced Tic-Tac-Toe game with dynamic features."""
+        # Validation checks
         if opponent.bot:
-            await ctx.send("You cannot play against a bot!")
+            embed = discord.Embed(
+                title="❌ Invalid Opponent",
+                description="You cannot play against a bot! Challenge a real player instead.",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
             return
+            
         if opponent == ctx.author:
-            await ctx.send("You cannot play against yourself!")
+            embed = discord.Embed(
+                title="❌ Invalid Opponent", 
+                description="You cannot play against yourself! Challenge someone else.",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
             return
 
+        # Create the enhanced game
         view = TicTacToe(ctx.author, opponent)
+        embed = view.create_game_embed()
         
-        embed = discord.Embed(
-            title="⭕ Tic-Tac-Toe Game",
-            description=f"{ctx.author.mention} (❌) vs {opponent.mention} (⭕)",
-            color=discord.Color.green()
-        )
-        embed.add_field(name="Current Turn", value=f"{ctx.author.mention}", inline=False)
-        embed.set_footer(text="Click the buttons below to make your move!")
-        
+        # Send initial game message
         msg = await ctx.send(embed=embed, view=view)
         view.message = msg
+        
+        # Send a ping to the opponent
+        ping_embed = discord.Embed(
+            description=f"🎮 {opponent.mention}, you've been challenged to Tic-Tac-Toe by {ctx.author.mention}!",
+            color=discord.Color.blurple()
+        )
+        await ctx.send(embed=ping_embed, delete_after=10)
+
+    @app_commands.command(name="tictactoe", description="Challenge someone to an enhanced Tic-Tac-Toe game!")
+    async def tictactoe_slash(self, interaction: discord.Interaction, opponent: discord.Member):
+        """Slash command version of Tic-Tac-Toe."""
+        # Validation checks
+        if opponent.bot:
+            embed = discord.Embed(
+                title="❌ Invalid Opponent",
+                description="You cannot play against a bot! Challenge a real player instead.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+            
+        if opponent == interaction.user:
+            embed = discord.Embed(
+                title="❌ Invalid Opponent", 
+                description="You cannot play against yourself! Challenge someone else.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # Create the enhanced game
+        view = TicTacToe(interaction.user, opponent)
+        embed = view.create_game_embed()
+        
+        # Send initial game message
+        await interaction.response.send_message(embed=embed, view=view)
+        view.message = await interaction.original_response()
+        
+        # Send a follow-up ping to the opponent
+        ping_embed = discord.Embed(
+            description=f"🎮 {opponent.mention}, you've been challenged to Tic-Tac-Toe by {interaction.user.mention}!",
+            color=discord.Color.blurple()
+        )
+        await interaction.followup.send(embed=ping_embed, ephemeral=False)
 
     @commands.command(name="trivia")
     async def trivia(self, ctx):
@@ -990,3 +1202,6 @@ class FunCog(commands.Cog):
 async def setup(bot):
     """Setup function for the cog."""
     await bot.add_cog(FunCog(bot))
+
+    await bot.add_cog(FunCog(bot))
+
