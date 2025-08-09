@@ -131,7 +131,6 @@ class TicTacToeButton(discord.ui.Button):
         # Make the move
         current_symbol = view.symbols[view.current_player_index]
         self.label = current_symbol
-        self.emoji = current_symbol
         self.style = discord.ButtonStyle.danger if view.current_player_index == 0 else discord.ButtonStyle.success
         self.is_empty = False
         view.board[self.position] = current_symbol
@@ -1204,4 +1203,5 @@ async def setup(bot):
     await bot.add_cog(FunCog(bot))
 
     await bot.add_cog(FunCog(bot))
+
 
