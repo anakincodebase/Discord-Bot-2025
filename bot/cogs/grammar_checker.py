@@ -590,7 +590,7 @@ class GrammarCheckerCog(commands.Cog):
             inline=False
         )
         
-        embed.set_footer(text="Powered by LanguageTool API • More languages may be added")
+        embed.set_footer(text="Powered by UnderLand • More languages may be added")
         
         await ctx.send(embed=embed)
 
