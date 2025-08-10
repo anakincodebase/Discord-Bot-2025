@@ -4,11 +4,14 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # Allows manual re-runs from GitHub Actions UI
+  workflow_dispatch:  # Manual re-run option
+  schedule:
+    - cron: "0 */6 * * *"  # Every 6 hours
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 350   # Just under 6h GitHub limit
     
     steps:
     - name: 🚀 Checkout Repository
@@ -72,3 +75,4 @@ jobs:
     - name: 🧹 Clean up environment file
       if: always()
       run: rm -f .env
+
