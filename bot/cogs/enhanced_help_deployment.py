@@ -259,7 +259,7 @@ class HelpView(discord.ui.View):
             inline=False
         )
         
-        embed.set_footer(text="Created by Afnan Ahmed • Use dropdown to explore categories")
+        embed.set_footer(text="Created by anakincodebase • Use dropdown to explore categories")
         
         return embed
     
@@ -581,7 +581,7 @@ class EnhancedHelpCog(commands.Cog):
             inline=True
         )
         
-        embed.set_footer(text="Created by Afnan Ahmed • Use ?help for command info")
+        embed.set_footer(text="Created by anakincodebase • Use ?help for command info")
         
         if self.bot.user.avatar:
             embed.set_thumbnail(url=self.bot.user.avatar.url)
