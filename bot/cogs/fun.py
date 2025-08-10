@@ -962,80 +962,7 @@ class FunCog(commands.Cog):
         if ctx.author.voice is None:
             await ctx.send("You must be in a voice channel to use this command.")
             return
-
-        voice_channel = ctx.author.voice.channel
-        voice_client = ctx.guild.voice_client
-
-        if voice_client is None:
-            voice_client = await voice_channel.connect()
-        elif voice_client.channel != voice_channel:
-            await voice_client.move_to(voice_channel)
-
-        ydl_options = {
-            "format": "bestaudio/best",
-            "noplaylist": True,
-            "youtube_include_dash_manifest": False,
-            "youtube_include_hls_manifest": False,
-            "postprocessors": [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }],
-            "quiet": False,
-            "extract_flat": False,
-        }
-
-        try:
-            results = await search_ytdlp_async(url, ydl_options)
-            if not results:
-                await ctx.send("No results found for the provided URL.")
-                return
-
-            title = results.get("title", "Untitled")
-            audio_url = results.get("url")
-            thumbnail = results.get("thumbnail")
-            duration = results.get("duration", 0)
-            duration_formatted = f"{divmod(duration, 60)[0]:02d}:{divmod(duration, 60)[1]:02d}" if duration else "Unknown"
-
-            # Determine service emoji based on URL
-            service_emoji = "<:bot:1402928409897865288>"  # Default bot emoji
-            if "youtube.com" in url.lower() or "youtu.be" in url.lower():
-                service_emoji = "<:YouTubeMusic:1365325642647736443>"
-            elif "spotify.com" in url.lower():
-                service_emoji = "<:Spotify:1365325657306824774>"
-
-            guild_id = str(ctx.guild.id)
-            add_song_to_queue(guild_id, audio_url, title, ctx.author.name, thumbnail)
-
-            if voice_client.is_playing() or voice_client.is_paused():
-                embed = discord.Embed(
-                    title=f"{service_emoji} Song Added to Queue",
-                    color=0xF7B267
-                )
-                embed.set_author(
-                    name="UnderLand Music",
-                    icon_url="https://cdn-icons-png.flaticon.com/512/15585/15585721.png"
-                )
-                embed.add_field(name="Track", value=f"**{title}**", inline=False)
-                embed.add_field(name="Requested By", value=ctx.author.mention, inline=True)
-                embed.add_field(name="Duration", value=f"`{duration_formatted}`", inline=True)
-                if thumbnail:
-                    embed.set_thumbnail(url=thumbnail)
-                embed.set_footer(text="NightZone • Next Up!")
-                await ctx.send(embed=embed)
-            else:
-                embed = discord.Embed(
-                    title=f"{service_emoji} Now Playing",
-                    description=f"**{title}**\nDuration: `{duration_formatted}`",
-                    color=0x1DB954
-                )
-                embed.set_thumbnail(url=thumbnail or discord.Embed.Empty)
-                embed.set_footer(text=f"Requested by {ctx.author.name}", icon_url=ctx.author.avatar.url)
-                await ctx.send(embed=embed)
-                await play_next_song(voice_client, guild_id, ctx.channel)
-
-        except Exception as e:
-            await ctx.send(f"An error occurred while processing the URL: {e}")
+          
 
     @commands.command(name="order55")
     async def order55(self, ctx):
@@ -1195,6 +1122,7 @@ async def setup(bot):
     await bot.add_cog(FunCog(bot))
 
     await bot.add_cog(FunCog(bot))
+
 
 
 
