@@ -1190,12 +1190,12 @@ class UtilsCog(commands.Cog):
     async def commands_list(self, ctx):
         """Show a quick list of all available commands."""
         
-        # Collect all commands from the bot
-        music_cmds = ["play", "playurl", "join", "leave", "skip", "pause", "resume", "stop", "queue", "clearqueue", "menu"]
+         # Collect all commands from the bot (deployment version - no music)
         fun_cmds = ["hangman", "tictactoe", "trivia", "ship", "say", "replysay"]
         social_cmds = ["bonk", "kiss", "hug", "slap", "yeet", "facepalm", "rip", "kidnap", "kill", "punch", "love", "dance", "avatar"]
-        util_cmds = ["def", "ask", "whois", "poll", "help", "commands"]
+        util_cmds = ["def", "whois", "poll", "help", "commands", "ping", "status"]
         mod_cmds = ["mute", "unmute", "ban", "kick", "purge", "dm"]
+        productivity_cmds = ["pomodoro", "script", "grammar"]
         
         embed = discord.Embed(
             title="📋 Quick Commands Reference",
@@ -1351,6 +1351,7 @@ async def setup(bot):
     """Setup function for the cog."""
     await bot.add_cog(UtilsCog(bot))
     await bot.add_cog(Dictionary(bot))
+
 
 
 
