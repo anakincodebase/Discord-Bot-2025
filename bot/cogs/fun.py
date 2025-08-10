@@ -958,14 +958,6 @@ class FunCog(commands.Cog):
     async def avatar(self, ctx, member: discord.Member):
         """Show a user's avatar."""
         await ctx.send(f"{member.mention}'s avatar: {member.avatar.url}")
-
-    @commands.command(name="playurl")
-    async def play_url(self, ctx, url: str):
-        """
-        Play a song directly from a YouTube URL.
-        """
-        # Import the necessary functions from complete_music
-        from bot.cogs.complete_music import search_ytdlp_async, add_song_to_queue, play_next_song
         
         if ctx.author.voice is None:
             await ctx.send("You must be in a voice channel to use this command.")
@@ -1203,5 +1195,6 @@ async def setup(bot):
     await bot.add_cog(FunCog(bot))
 
     await bot.add_cog(FunCog(bot))
+
 
 
