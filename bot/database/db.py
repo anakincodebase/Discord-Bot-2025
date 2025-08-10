@@ -27,19 +27,47 @@ async def init_db():
     
     try:
         # Create database directory if it doesn't exist
-        db_path = Path("song_queue.db")
+        db_path = Path("bot_data.db")
         
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
         
-        # Create song queue table
+        # Create user data table for general bot features
         cursor.execute('''
-        CREATE TABLE IF NOT EXISTS song_queue (
+        CREATE TABLE IF NOT EXISTS user_data (
+            user_id TEXT,
             guild_id TEXT,
-            audio_url TEXT,
-            title TEXT,
-            requestor_name TEXT,
-            thumbnail TEXT
+            username TEXT,
+            data_type TEXT,
+            data_value TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+        
+        # Create guild settings table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS guild_settings (
+            guild_id TEXT PRIMARY KEY,
+            prefix TEXT DEFAULT '?',
+            welcome_channel_id TEXT,
+            mod_log_channel_id TEXT,
+            auto_role_id TEXT,
+            settings_json TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+        
+        # Create game statistics table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS game_stats (
+            user_id TEXT,
+            guild_id TEXT,
+            game_type TEXT,
+            wins INTEGER DEFAULT 0,
+            losses INTEGER DEFAULT 0,
+            total_games INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
         
@@ -48,8 +76,10 @@ async def init_db():
         
     except sqlite3.Error as e:
         logger.error(f"Database error: {e}")
-        sys.exit(1)
+        # Don't exit on database errors in deployment
+        logger.warning("Continuing without database functionality")
 
 def get_db_connection():
     """Get the database connection."""
     return conn, cursor
+
