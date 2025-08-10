@@ -1,242 +1,267 @@
 """
-Database models and operations for song queue management.
+Database models and operations for Discord bot data management.
 
 Author: Afnan Ahmed
 Created: 2025
-Description: Comprehensive song queue management system for Discord music bot
-             with SQLite persistence, repeat functionality, and state management.
+Description: Comprehensive data management system for Discord bot
+             with SQLite persistence for user data, guild settings, and game statistics.
 License: MIT
 """
 
 import sqlite3
 import logging
-from collections import deque
-from typing import List, Optional, Tuple
+import json
+from typing import Dict, Optional, Any
+from datetime import datetime
 
 from .db import get_db_connection
 
 logger = logging.getLogger(__name__)
 
-# Dictionary to store song queues for each guild
-SONG_QUEUES = {}
+# In-memory cache for frequently accessed data
+GUILD_SETTINGS_CACHE = {}
+USER_DATA_CACHE = {}
 
-# Dictionary to store repeat status for each guild
-REPEAT_STATUS = {}
-
-# Dictionary to store last messages for each guild
-LAST_MESSAGES = {}
-
-def add_song_to_queue(guild_id: str, audio_url: str, title: str, requestor_name: str, thumbnail: str) -> None:
-    """Add a song to the queue."""
-    logger.info(f"Adding song to queue: {title} by {requestor_name} in guild {guild_id}")
-    
+def get_guild_settings(guild_id: str) -> Dict[str, Any]:
+    """Get guild settings from database or cache."""
     try:
+        # Check cache first
+        if guild_id in GUILD_SETTINGS_CACHE:
+            return GUILD_SETTINGS_CACHE[guild_id]
+        
         conn, cursor = get_db_connection()
-        
-        # Add to in-memory queue
-        if guild_id not in SONG_QUEUES:
-            SONG_QUEUES[guild_id] = deque()
-        SONG_QUEUES[guild_id].append((audio_url, title, requestor_name, thumbnail))
-        
-        # Add to database
+        if not conn:
+            return get_default_guild_settings()
+            
         cursor.execute('''
-        INSERT INTO song_queue (guild_id, audio_url, title, requestor_name, thumbnail)
-        VALUES (?, ?, ?, ?, ?)
-        ''', (guild_id, audio_url, title, requestor_name, thumbnail))
-        conn.commit()
-        
-    except sqlite3.Error as e:
-        logger.error(f"Failed to add song to queue: {e}")
-
-def get_next_song_from_queue(guild_id: str) -> Optional[Tuple[str, str, str, str]]:
-    """Get the next song from the queue."""
-    logger.info(f"Getting next song from queue for guild {guild_id}")
-    
-    try:
-        conn, cursor = get_db_connection()
-        
-        # Get from in-memory queue
-        if guild_id in SONG_QUEUES and SONG_QUEUES[guild_id]:
-            return SONG_QUEUES[guild_id].popleft()
-        
-        # Get from database
-        cursor.execute('''
-        SELECT audio_url, title, requestor_name, thumbnail
-        FROM song_queue
-        WHERE guild_id = ?
-        ORDER BY rowid ASC
-        LIMIT 1
+        SELECT prefix, welcome_channel_id, mod_log_channel_id, auto_role_id, settings_json
+        FROM guild_settings WHERE guild_id = ?
         ''', (guild_id,))
         
-        song = cursor.fetchone()
-        if song:
-            cursor.execute('''
-            DELETE FROM song_queue
-            WHERE guild_id = ? AND audio_url = ? AND title = ? AND requestor_name = ? AND thumbnail = ?
-            ''', (guild_id, *song))
-            conn.commit()
+        result = cursor.fetchone()
+        if result:
+            settings = {
+                'prefix': result[0] or '?',
+                'welcome_channel_id': result[1],
+                'mod_log_channel_id': result[2],
+                'auto_role_id': result[3],
+                'custom_settings': json.loads(result[4] or '{}')
+            }
+        else:
+            # Insert default settings
+            settings = get_default_guild_settings()
+            set_guild_settings(guild_id, settings)
         
-        return song
+        # Cache the settings
+        GUILD_SETTINGS_CACHE[guild_id] = settings
+        return settings
+        
+    except (sqlite3.Error, json.JSONDecodeError) as e:
+        logger.error(f"Failed to get guild settings for {guild_id}: {e}")
+        return get_default_guild_settings()
+
+def set_guild_settings(guild_id: str, settings: Dict[str, Any]) -> bool:
+    """Update guild settings in database."""
+    try:
+        conn, cursor = get_db_connection()
+        if not conn:
+            return False
+            
+        cursor.execute('''
+        INSERT OR REPLACE INTO guild_settings 
+        (guild_id, prefix, welcome_channel_id, mod_log_channel_id, auto_role_id, settings_json, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            guild_id,
+            settings.get('prefix', '?'),
+            settings.get('welcome_channel_id'),
+            settings.get('mod_log_channel_id'),
+            settings.get('auto_role_id'),
+            json.dumps(settings.get('custom_settings', {})),
+            datetime.now().isoformat()
+        ))
+        
+        conn.commit()
+        
+        # Update cache
+        GUILD_SETTINGS_CACHE[guild_id] = settings
+        
+        logger.info(f"Updated guild settings for {guild_id}")
+        return True
+        
+    except (sqlite3.Error, json.JSONDecodeError) as e:
+        logger.error(f"Failed to set guild settings for {guild_id}: {e}")
+        return False
+
+def get_default_guild_settings() -> Dict[str, Any]:
+    """Get default guild settings."""
+    return {
+        'prefix': '?',
+        'welcome_channel_id': None,
+        'mod_log_channel_id': None,
+        'auto_role_id': None,
+        'custom_settings': {}
+    }
+
+def get_user_data(user_id: str, guild_id: str, data_type: str) -> Optional[str]:
+    """Get user data from database."""
+    try:
+        cache_key = f"{user_id}:{guild_id}:{data_type}"
+        if cache_key in USER_DATA_CACHE:
+            return USER_DATA_CACHE[cache_key]
+            
+        conn, cursor = get_db_connection()
+        if not conn:
+            return None
+            
+        cursor.execute('''
+        SELECT data_value FROM user_data 
+        WHERE user_id = ? AND guild_id = ? AND data_type = ?
+        ORDER BY created_at DESC LIMIT 1
+        ''', (user_id, guild_id, data_type))
+        
+        result = cursor.fetchone()
+        value = result[0] if result else None
+        
+        # Cache the result
+        USER_DATA_CACHE[cache_key] = value
+        return value
         
     except sqlite3.Error as e:
-        logger.error(f"Failed to get next song from queue: {e}")
+        logger.error(f"Failed to get user data: {e}")
         return None
 
-def clear_queue(guild_id: str) -> None:
-    """Clear the queue for a guild."""
-    logger.info(f"Clearing queue for guild {guild_id}")
-    
+def set_user_data(user_id: str, guild_id: str, username: str, data_type: str, data_value: str) -> bool:
+    """Set user data in database."""
     try:
         conn, cursor = get_db_connection()
-        
-        # Clear in-memory queue
-        if guild_id in SONG_QUEUES:
-            SONG_QUEUES[guild_id].clear()
-            logger.info(f"In-memory queue cleared for guild {guild_id}")
-        
-        # Clear database
-        cursor.execute('DELETE FROM song_queue WHERE guild_id = ?', (guild_id,))
-        conn.commit()
-        logger.info(f"Database queue cleared for guild {guild_id}")
-        
-    except sqlite3.Error as e:
-        logger.error(f"Failed to clear queue for guild {guild_id}: {e}")
-
-def advanced_clear_queue(guild_id: str) -> None:
-    """Advanced queue clearing with state reset."""
-    logger.info(f"Advanced clearing queue for guild {guild_id}")
-    
-    try:
-        # Clear queue
-        clear_queue(guild_id)
-        
-        # Reset repeat status to prevent unwanted looping
-        if guild_id in REPEAT_STATUS:
-            REPEAT_STATUS[guild_id] = False
-            logger.info(f"Repeat status disabled for guild {guild_id}")
+        if not conn:
+            return False
             
-        if guild_id in LAST_MESSAGES:
-            LAST_MESSAGES.pop(guild_id)
-            logger.info(f"Last messages reset for guild {guild_id}")
-            
-    except Exception as e:
-        logger.error(f"Failed to advanced clear queue for guild {guild_id}: {e}")
-
-def get_queue(guild_id: str) -> List[Tuple]:
-    """Get the current queue for a guild."""
-    logger.info(f"Getting queue for guild {guild_id}")
-    
-    try:
-        conn, cursor = get_db_connection()
-        
-        # Get from in-memory queue
-        if guild_id in SONG_QUEUES:
-            return list(SONG_QUEUES[guild_id])
-        
-        # Get from database
         cursor.execute('''
-        SELECT audio_url, title, requestor_name, thumbnail
-        FROM song_queue
-        WHERE guild_id = ?
-        ORDER BY rowid ASC
-        ''', (guild_id,))
+        INSERT INTO user_data (user_id, guild_id, username, data_type, data_value)
+        VALUES (?, ?, ?, ?, ?)
+        ''', (user_id, guild_id, username, data_type, data_value))
         
-        return cursor.fetchall()
-        
-    except sqlite3.Error as e:
-        logger.error(f"Failed to get queue: {e}")
-        return []
-
-def remove_song_from_queue(guild_id: str, title: str) -> None:
-    """Remove a specific song from the queue."""
-    logger.info(f"Removing song {title} from queue for guild {guild_id}")
-    
-    try:
-        conn, cursor = get_db_connection()
-        
-        # Remove from in-memory queue
-        if guild_id in SONG_QUEUES:
-            SONG_QUEUES[guild_id] = deque(
-                song for song in SONG_QUEUES[guild_id] if song[1] != title
-            )
-        
-        # Remove from database
-        cursor.execute('''
-        DELETE FROM song_queue
-        WHERE guild_id = ? AND title = ?
-        ''', (guild_id, title))
         conn.commit()
         
+        # Update cache
+        cache_key = f"{user_id}:{guild_id}:{data_type}"
+        USER_DATA_CACHE[cache_key] = data_value
+        
+        return True
+        
     except sqlite3.Error as e:
-        logger.error(f"Failed to remove song from queue: {e}")
+        logger.error(f"Failed to set user data: {e}")
+        return False
 
-def list_all_songs(guild_id: str) -> List[Tuple]:
-    """List all songs in the queue."""
-    logger.info(f"Listing all songs in queue for guild {guild_id}")
-    
+def get_game_stats(user_id: str, guild_id: str, game_type: str) -> Dict[str, int]:
+    """Get game statistics for a user."""
     try:
         conn, cursor = get_db_connection()
-        
-        # List from in-memory queue
-        if guild_id in SONG_QUEUES:
-            return list(SONG_QUEUES[guild_id])
-        
-        # List from database
+        if not conn:
+            return {'wins': 0, 'losses': 0, 'total_games': 0}
+            
         cursor.execute('''
-        SELECT audio_url, title, requestor_name, thumbnail
-        FROM song_queue
-        WHERE guild_id = ?
-        ORDER BY rowid ASC
-        ''', (guild_id,))
+        SELECT wins, losses, total_games FROM game_stats
+        WHERE user_id = ? AND guild_id = ? AND game_type = ?
+        ''', (user_id, guild_id, game_type))
         
-        return cursor.fetchall()
-        
-    except sqlite3.Error as e:
-        logger.error(f"Failed to list all songs: {e}")
-        return []
-
-def pop_next_song(guild_id: str) -> Optional[Tuple[str, str, str, str]]:
-    """Remove and return the next song from the queue."""
-    logger.info(f"Popping next song from queue for guild {guild_id}")
-    return get_next_song_from_queue(guild_id)
-
-def get_queue_length(guild_id: str) -> int:
-    """Get the number of songs in the queue."""
-    if guild_id in SONG_QUEUES:
-        return len(SONG_QUEUES[guild_id])
-    
-    try:
-        conn, cursor = get_db_connection()
-        cursor.execute('SELECT COUNT(*) FROM song_queue WHERE guild_id = ?', (guild_id,))
         result = cursor.fetchone()
-        return result[0] if result else 0
+        if result:
+            return {
+                'wins': result[0],
+                'losses': result[1], 
+                'total_games': result[2]
+            }
+        else:
+            return {'wins': 0, 'losses': 0, 'total_games': 0}
+            
     except sqlite3.Error as e:
-        logger.error(f"Failed to get queue length: {e}")
-        return 0
+        logger.error(f"Failed to get game stats: {e}")
+        return {'wins': 0, 'losses': 0, 'total_games': 0}
 
-def is_repeat_enabled(guild_id: str) -> bool:
-    """Check if repeat is enabled for a guild."""
-    # Default to False to prevent unwanted repeating
-    return REPEAT_STATUS.get(guild_id, False)
+def update_game_stats(user_id: str, guild_id: str, game_type: str, won: bool) -> bool:
+    """Update game statistics for a user."""
+    try:
+        conn, cursor = get_db_connection()
+        if not conn:
+            return False
+            
+        # Get current stats
+        stats = get_game_stats(user_id, guild_id, game_type)
+        
+        # Update stats
+        stats['total_games'] += 1
+        if won:
+            stats['wins'] += 1
+        else:
+            stats['losses'] += 1
+        
+        # Insert or update record
+        cursor.execute('''
+        INSERT OR REPLACE INTO game_stats 
+        (user_id, guild_id, game_type, wins, losses, total_games, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            user_id, guild_id, game_type,
+            stats['wins'], stats['losses'], stats['total_games'],
+            datetime.now().isoformat()
+        ))
+        
+        conn.commit()
+        return True
+        
+    except sqlite3.Error as e:
+        logger.error(f"Failed to update game stats: {e}")
+        return False
 
-def set_repeat_status(guild_id: str, status: bool) -> None:
-    """Set repeat status for a guild."""
-    REPEAT_STATUS[guild_id] = status
-    logger.info(f"Set repeat status to {status} for guild {guild_id}")
+def get_leaderboard(guild_id: str, game_type: str, limit: int = 10) -> list:
+    """Get leaderboard for a specific game type."""
+    try:
+        conn, cursor = get_db_connection()
+        if not conn:
+            return []
+            
+        cursor.execute('''
+        SELECT user_id, wins, losses, total_games
+        FROM game_stats
+        WHERE guild_id = ? AND game_type = ?
+        ORDER BY wins DESC, total_games DESC
+        LIMIT ?
+        ''', (guild_id, game_type, limit))
+        
+        return cursor.fetchall()
+        
+    except sqlite3.Error as e:
+        logger.error(f"Failed to get leaderboard: {e}")
+        return []
 
-def ensure_clean_state(guild_id: str) -> None:
-    """Ensure clean state for a guild - no unwanted repeat loops."""
-    # Default repeat to False for clean playback
-    if guild_id not in REPEAT_STATUS:
-        REPEAT_STATUS[guild_id] = False
-        logger.info(f"Initialized clean state (repeat=False) for guild {guild_id}")
+def clear_user_cache(user_id: str = None, guild_id: str = None):
+    """Clear user data cache."""
+    global USER_DATA_CACHE
+    
+    if user_id and guild_id:
+        # Clear specific user's cache
+        keys_to_remove = [key for key in USER_DATA_CACHE.keys() 
+                         if key.startswith(f"{user_id}:{guild_id}:")]
+        for key in keys_to_remove:
+            del USER_DATA_CACHE[key]
+    else:
+        # Clear all cache
+        USER_DATA_CACHE.clear()
+    
+    logger.info("User data cache cleared")
 
-def get_queue_info(guild_id: str) -> dict:
-    """Get comprehensive queue information."""
-    queue = get_queue(guild_id)
-    return {
-        "queue_length": len(queue),
-        "songs": queue,
-        "repeat_enabled": is_repeat_enabled(guild_id),
-        "current_song": queue[0] if queue else None
-    }
+def clear_guild_cache(guild_id: str = None):
+    """Clear guild settings cache."""
+    global GUILD_SETTINGS_CACHE
+    
+    if guild_id:
+        GUILD_SETTINGS_CACHE.pop(guild_id, None)
+    else:
+        GUILD_SETTINGS_CACHE.clear()
+    
+    logger.info("Guild settings cache cleared")
+
+
