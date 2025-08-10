@@ -1104,7 +1104,7 @@ class UtilsCog(commands.Cog):
         view = WhoisView(embeds)
         await ctx.send(embed=embeds[0], view=view)
 
-    @commands.command(name="avatar")
+    @commands.command(name="userinfo", aliases=["uinfo"])
     async def avatar(self, ctx, member: Optional[discord.Member] = None):
         """Get a user's avatar."""
         if member is None:
@@ -1351,6 +1351,7 @@ async def setup(bot):
     """Setup function for the cog."""
     await bot.add_cog(UtilsCog(bot))
     await bot.add_cog(Dictionary(bot))
+
 
 
 
