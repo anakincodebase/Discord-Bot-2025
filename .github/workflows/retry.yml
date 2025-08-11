@@ -1,18 +1,1 @@
 
-name: Retry Deploy UnderLand Bot if Failed
-
-on:
-  workflow_run:
-    workflows: ["Deploy UnderLand Bot", "Retry Deploy UnderLand Bot if Failed"]
-    types:
-      - completed
-
-jobs:
-  retry-on-failure:
-    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Retry last run
-        run: gh run rerun ${{ github.event.workflow_run.id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
