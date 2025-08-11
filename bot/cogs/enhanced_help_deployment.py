@@ -132,10 +132,13 @@ class DeploymentHelpManager:
                               ["?kick @user Breaking rules"], permissions="Kick Members")
         moderation.add_command("purge", "Delete messages in bulk", "?purge <amount>",
                               ["?purge 10", "?purge 50"], permissions="Manage Messages")
+        moderation.add_command("hardshutdown", "Emergency bot shutdown", "?hardshutdown",
+                              ["?hardshutdown"], permissions="Bot Owner Only")
         moderation.add_feature("🔒 Role-based permissions")
         moderation.add_feature("⚡ Bulk operations")
         moderation.add_feature("🛡️ Security controls")
         moderation.add_feature("📝 Reason logging")
+        moderation.add_feature("🚨 Emergency shutdown capabilities")
         self.categories["moderation"] = moderation
         
         # 🌐 Server & Utility
@@ -163,6 +166,26 @@ class DeploymentHelpManager:
         scripts.add_feature("🎬 Script-based adventures")
         scripts.add_feature("👥 Group participation")
         self.categories["scripts"] = scripts
+        
+        # 📅 Events & Calendar
+        events = HelpCategory("Events & Calendar", "📅", "Event creation and management system")
+        events.add_command("createevent", "Create a new server event with RSVP", 
+                          "?createevent <title> <description> <date> <time> [duration]",
+                          ["?createevent 'Game Night' 'Weekly gaming session' 2025-12-25 19:00 120",
+                           "/createevent Party 'Birthday celebration' 12/25/2025 '7:00 PM' 180"])
+        events.add_command("events", "List all upcoming server events", "?events", ["/events"])
+        events.add_command("eventinfo", "Get detailed information about an event", "?eventinfo <event_id>",
+                          ["?eventinfo abc123", "/eventinfo def456"])
+        events.add_command("cancelevent", "Cancel an event (creator/admin only)", "?cancelevent <event_id>",
+                          ["?cancelevent abc123"], permissions="Event Creator or Administrator")
+        events.add_feature("🎯 RSVP system with ✅ Attending, ❓ Maybe, ❌ Not Attending")
+        events.add_feature("⏰ Automatic reminders 30 minutes before events")
+        events.add_feature("📊 Real-time participant tracking")
+        events.add_feature("🗓️ Support for multiple date/time formats")
+        events.add_feature("🔔 Event notifications and updates")
+        events.add_feature("🎮 Interactive buttons for quick RSVP")
+        events.add_feature("📝 Event duration tracking and management")
+        self.categories["events"] = events
     
     def get_category(self, category_key: str) -> Optional[HelpCategory]:
         """Get a specific category."""
@@ -170,7 +193,7 @@ class DeploymentHelpManager:
     
     def get_all_categories(self) -> List[HelpCategory]:
         """Get all categories in order."""
-        order = ["games", "social", "education", "productivity", "moderation", "utility", "scripts"]
+        order = ["games", "social", "education", "productivity", "events", "moderation", "utility", "scripts"]
         return [self.categories[key] for key in order if key in self.categories]
     
     def get_total_commands(self) -> int:
@@ -246,7 +269,7 @@ class HelpView(discord.ui.View):
         
         embed.add_field(
             name="🚀 Popular Commands",
-            value="`?hangman` • `?trivia` • `?ping` • `?poll` • `?def`",
+            value="`?hangman` • `?trivia` • `?createevent` • `?poll` • `?def`",
             inline=False
         )
         

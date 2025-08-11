@@ -30,6 +30,7 @@ from bot.cogs.pomodoro import PomodoroCog
 from bot.cogs.enhanced_help_deployment import EnhancedHelpCog
 from bot.cogs.script_session import ScriptSessionCog
 from bot.cogs.grammar_checker import GrammarCheckerCog
+from bot.cogs.events import EventsCog
 from bot.database.db import init_db
 
 # Setup logging with UTF-8 encoding for cloud deployment
@@ -86,7 +87,8 @@ class UnderLandCloudBot(commands.Bot):
             PomodoroCog,
             EnhancedHelpCog,
             ScriptSessionCog,
-            GrammarCheckerCog
+            GrammarCheckerCog,
+            EventsCog
         ]
         
         for cog in deployment_cogs:
@@ -208,7 +210,7 @@ class UnderLandCloudBot(commands.Bot):
                 'help', 'ping', 'status', 'hangman', 'trivia', 'tictactoe', 
                 'ship', 'bonk', 'hug', 'kiss', 'slap', 'def', 'whois', 
                 'avatar', 'say', 'mute', 'ban', 'kick', 'purge', 'pomodoro', 
-                'poll', 'script'
+                'poll', 'script', 'createevent', 'events', 'eventinfo', 'cancelevent'
             ]
             
             closest_matches = difflib.get_close_matches(

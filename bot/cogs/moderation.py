@@ -146,9 +146,22 @@ class ModerationCog(commands.Cog):
     async def hardshutdown(self, ctx):
         """Shutdown the bot (owner only)."""
         if not self.is_owner(str(ctx.author.id)):
+            embed = discord.Embed(
+                title="🚫 Access Denied",
+                description="This command is restricted to bot owners only.",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
             return
 
-        await ctx.send("<:Verified:1363648632678518957> Bot is shutting down now...")
+        embed = discord.Embed(
+            title="🛑 Bot Shutdown",
+            description="Bot is shutting down now...",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed)
+        
+        logger.info(f"Bot shutdown initiated by {ctx.author} ({ctx.author.id})")
         await self.bot.close()
 
     @commands.command(name="superhardshutdown")
