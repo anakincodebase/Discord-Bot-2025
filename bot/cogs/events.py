@@ -48,6 +48,7 @@ class EventData:
         self.not_attending: List[int] = []
         self.is_cancelled = False
         self.reminder_sent = False
+        self.discord_event_id: Optional[int] = None  # Discord native event ID
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert event to dictionary for storage."""
@@ -65,7 +66,8 @@ class EventData:
             'maybe_participants': self.maybe_participants,
             'not_attending': self.not_attending,
             'is_cancelled': self.is_cancelled,
-            'reminder_sent': self.reminder_sent
+            'reminder_sent': self.reminder_sent,
+            'discord_event_id': self.discord_event_id
         }
     
     @classmethod
@@ -87,6 +89,7 @@ class EventData:
         event.not_attending = data.get('not_attending', [])
         event.is_cancelled = data.get('is_cancelled', False)
         event.reminder_sent = data.get('reminder_sent', False)
+        event.discord_event_id = data.get('discord_event_id')
         return event
 
 class EventView(discord.ui.View):
@@ -265,7 +268,39 @@ class EventsCog(commands.Cog):
             logger.error(f"Error parsing datetime: {e}")
             return None
     
-    async def create_event_embed(self, event: EventData) -> discord.Embed:
+    async def create_discord_event(self, guild: discord.Guild, event_data: EventData) -> Optional[discord.ScheduledEvent]:
+        """Create a Discord native scheduled event."""
+        try:
+            # Check if bot has permission to manage events
+            if not guild.me.guild_permissions.manage_events:
+                logger.warning(f"Bot lacks 'Manage Events' permission in guild {guild.id}")
+                return None
+            
+            # Create the Discord scheduled event
+            discord_event = await guild.create_scheduled_event(
+                name=event_data.title,
+                description=event_data.description,
+                start_time=event_data.start_time,
+                end_time=event_data.start_time + timedelta(minutes=event_data.duration_minutes),
+                entity_type=discord.EntityType.external,
+                location="Discord Server Event",
+                privacy_level=discord.PrivacyLevel.guild_only
+            )
+            
+            logger.info(f"Created Discord event: {discord_event.id} for bot event: {event_data.event_id}")
+            return discord_event
+            
+        except discord.Forbidden:
+            logger.error(f"Missing permissions to create events in guild {guild.id}")
+            return None
+        except discord.HTTPException as e:
+            logger.error(f"HTTP error creating Discord event: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error creating Discord event: {e}")
+            return None
+
+    async def create_event_embed(self, event: EventData, discord_event: Optional[discord.ScheduledEvent] = None) -> discord.Embed:
         """Create embed for event display."""
         embed = discord.Embed(
             title=f"📅 {event.title}",
@@ -290,12 +325,26 @@ class EventsCog(commands.Cog):
             inline=True
         )
         
-        # Event ID
+        # Event ID and Discord integration
         embed.add_field(
             name="🆔 Event ID",
             value=f"`{event.event_id}`",
             inline=True
         )
+        
+        # Discord Event Status
+        if event.discord_event_id:
+            embed.add_field(
+                name="🌐 Discord Event",
+                value="✅ Created in server events",
+                inline=True
+            )
+        else:
+            embed.add_field(
+                name="🌐 Discord Event",
+                value="❌ Failed to create (check permissions)",
+                inline=True
+            )
         
         # RSVP counts
         attending_count = len(event.participants)
@@ -416,13 +465,30 @@ class EventsCog(commands.Cog):
         
         # Store event
         self.events[event_id] = event
+        
+        # Create Discord native event
+        discord_event = await self.create_discord_event(ctx.guild, event)
+        if discord_event:
+            event.discord_event_id = discord_event.id
+        
         await self.save_events()
         
         # Create embed and view
-        embed = await self.create_event_embed(event)
+        embed = await self.create_event_embed(event, discord_event)
         view = EventView(event, self.bot)
         
+        # Create success message
+        success_message = f"✅ **Event Created Successfully!**\n\n"
+        if discord_event:
+            success_message += f"📅 **Discord Event:** Created in server events\n"
+            success_message += f"🔗 **Event Link:** [View in Discord Events](https://discord.com/events/{ctx.guild.id}/{discord_event.id})\n"
+        else:
+            success_message += f"⚠️ **Note:** Could not create Discord server event (missing permissions)\n"
+        success_message += f"🆔 **Bot Event ID:** `{event_id}`\n"
+        success_message += f"⏰ **Reminders:** Will be sent 30 minutes before the event"
+        
         # Send event message
+        await ctx.send(success_message)
         await ctx.send(embed=embed, view=view)
         
         logger.info(f"Event created: {event_id} - {title} by {ctx.author}")
@@ -555,6 +621,19 @@ class EventsCog(commands.Cog):
         
         # Cancel event
         event.is_cancelled = True
+        
+        # Cancel Discord native event if it exists
+        discord_cancelled = False
+        if event.discord_event_id:
+            try:
+                discord_event = ctx.guild.get_scheduled_event(event.discord_event_id)
+                if discord_event and discord_event.status != discord.EventStatus.cancelled:
+                    await discord_event.cancel()
+                    discord_cancelled = True
+                    logger.info(f"Cancelled Discord event: {event.discord_event_id}")
+            except Exception as e:
+                logger.error(f"Error cancelling Discord event {event.discord_event_id}: {e}")
+        
         await self.save_events()
         
         embed = discord.Embed(
@@ -562,6 +641,20 @@ class EventsCog(commands.Cog):
             description=f"Event `{event.title}` has been cancelled.",
             color=discord.Color.green()
         )
+        
+        if discord_cancelled:
+            embed.add_field(
+                name="🌐 Discord Event",
+                value="✅ Also cancelled in server events",
+                inline=False
+            )
+        elif event.discord_event_id:
+            embed.add_field(
+                name="🌐 Discord Event",
+                value="⚠️ Could not cancel Discord event (may need manual cancellation)",
+                inline=False
+            )
+        
         await ctx.send(embed=embed)
         
         logger.info(f"Event cancelled: {event_id} by {ctx.author}")
@@ -625,6 +718,53 @@ class EventsCog(commands.Cog):
         except Exception as e:
             logger.error(f"Error sending reminder for event {event.event_id}: {e}")
     
+    @commands.hybrid_command(name="eventperms", description="Check bot permissions for creating Discord events")
+    async def check_event_permissions(self, ctx: commands.Context):
+        """Check if the bot has permissions to create Discord server events."""
+        embed = discord.Embed(
+            title="🔧 Bot Event Permissions Check",
+            color=discord.Color.blue()
+        )
+        
+        # Check Manage Events permission
+        has_manage_events = ctx.guild.me.guild_permissions.manage_events
+        
+        embed.add_field(
+            name="📅 Manage Events Permission",
+            value="✅ Enabled" if has_manage_events else "❌ Missing",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="🤖 Bot Status",
+            value="✅ Ready to create Discord events" if has_manage_events else "⚠️ Cannot create Discord events",
+            inline=True
+        )
+        
+        if not has_manage_events:
+            embed.add_field(
+                name="🛠️ How to Fix",
+                value="1. Go to **Server Settings** → **Roles**\n"
+                      "2. Find the bot's role\n"
+                      "3. Enable **Manage Events** permission\n"
+                      "4. Save changes and try again",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="⚠️ Current Limitation",
+                value="Bot events will still work, but won't appear in Discord's native Events tab",
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="🎉 All Set!",
+                value="The bot can create Discord server events that will appear in the Events tab",
+                inline=False
+            )
+        
+        await ctx.send(embed=embed)
+
     @check_reminders.before_loop
     async def before_check_reminders(self):
         """Wait for bot to be ready before starting reminder checker."""

@@ -210,7 +210,8 @@ class UnderLandCloudBot(commands.Bot):
                 'help', 'ping', 'status', 'hangman', 'trivia', 'tictactoe', 
                 'ship', 'bonk', 'hug', 'kiss', 'slap', 'def', 'whois', 
                 'avatar', 'say', 'mute', 'ban', 'kick', 'purge', 'pomodoro', 
-                'poll', 'script', 'createevent', 'events', 'eventinfo', 'cancelevent'
+                'poll', 'script', 'createevent', 'events', 'eventinfo', 
+                'cancelevent', 'eventperms'
             ]
             
             closest_matches = difflib.get_close_matches(

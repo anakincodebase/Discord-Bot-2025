@@ -178,6 +178,8 @@ class DeploymentHelpManager:
                           ["?eventinfo abc123", "/eventinfo def456"])
         events.add_command("cancelevent", "Cancel an event (creator/admin only)", "?cancelevent <event_id>",
                           ["?cancelevent abc123"], permissions="Event Creator or Administrator")
+        events.add_command("eventperms", "Check bot permissions for Discord events", "?eventperms",
+                          ["?eventperms"], permissions="Anyone")
         events.add_feature("🎯 RSVP system with ✅ Attending, ❓ Maybe, ❌ Not Attending")
         events.add_feature("⏰ Automatic reminders 30 minutes before events")
         events.add_feature("📊 Real-time participant tracking")
@@ -185,6 +187,8 @@ class DeploymentHelpManager:
         events.add_feature("🔔 Event notifications and updates")
         events.add_feature("🎮 Interactive buttons for quick RSVP")
         events.add_feature("📝 Event duration tracking and management")
+        events.add_feature("🌐 Creates Discord native server events")
+        events.add_feature("🔗 Integration with Discord Events tab")
         self.categories["events"] = events
     
     def get_category(self, category_key: str) -> Optional[HelpCategory]:
