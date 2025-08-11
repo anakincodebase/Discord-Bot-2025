@@ -276,6 +276,13 @@ class EventsCog(commands.Cog):
                 logger.warning(f"Bot lacks 'Manage Events' permission in guild {guild.id}")
                 return None
             
+            # Ensure timezone-aware datetime
+            from datetime import timezone
+            start_time = event_data.start_time
+            if start_time.tzinfo is None:
+                start_time = start_time.replace(tzinfo=timezone.utc)
+            end_time = start_time + timedelta(minutes=event_data.duration_minutes)
+            
             # Try to find a suitable voice channel for the event
             voice_channel = None
             if channel and isinstance(channel, discord.VoiceChannel):
@@ -292,8 +299,8 @@ class EventsCog(commands.Cog):
                 discord_event = await guild.create_scheduled_event(
                     name=event_data.title,
                     description=event_data.description,
-                    start_time=event_data.start_time,
-                    end_time=event_data.start_time + timedelta(minutes=event_data.duration_minutes),
+                    start_time=start_time,
+                    end_time=end_time,
                     entity_type=discord.EntityType.voice,
                     channel=voice_channel,
                     privacy_level=discord.PrivacyLevel.guild_only
@@ -303,8 +310,8 @@ class EventsCog(commands.Cog):
                 discord_event = await guild.create_scheduled_event(
                     name=event_data.title,
                     description=event_data.description,
-                    start_time=event_data.start_time,
-                    end_time=event_data.start_time + timedelta(minutes=event_data.duration_minutes),
+                    start_time=start_time,
+                    end_time=end_time,
                     entity_type=discord.EntityType.external,
                     location="Server Event - Check event details",
                     privacy_level=discord.PrivacyLevel.guild_only
@@ -847,6 +854,10 @@ class EventsCog(commands.Cog):
         
         try:
             # Create Discord native event
+            # Ensure the datetime is timezone-aware (UTC)
+            from datetime import timezone
+            if event_datetime.tzinfo is None:
+                event_datetime = event_datetime.replace(tzinfo=timezone.utc)
             end_time = event_datetime + timedelta(minutes=duration)
             
             if channel:
@@ -924,18 +935,35 @@ class EventsCog(commands.Cog):
             )
             await ctx.send(embed=embed)
         except discord.HTTPException as e:
+            logger.error(f"HTTP error creating Discord event: {e}")
             embed = discord.Embed(
                 title="❌ Creation Failed",
-                description=f"Failed to create Discord event: {str(e)}",
+                description=f"Failed to create Discord event.\n\n**Error Details:**\n```{str(e)}```",
                 color=discord.Color.red()
+            )
+            embed.add_field(
+                name="💡 Common Issues",
+                value="• Event time must be in the future\n"
+                      "• Event title/description too long\n"
+                      "• Voice channel permissions issue",
+                inline=False
             )
             await ctx.send(embed=embed)
         except Exception as e:
-            logger.error(f"Error creating Discord event: {e}")
+            logger.error(f"Unexpected error creating Discord event: {e}")
+            import traceback
+            traceback.print_exc()
             embed = discord.Embed(
                 title="❌ Unexpected Error",
-                description="An unexpected error occurred while creating the event.",
+                description=f"An unexpected error occurred while creating the event.\n\n**Error:**\n```{str(e)}```",
                 color=discord.Color.red()
+            )
+            embed.add_field(
+                name="🛠️ Debug Info",
+                value=f"**Event Time:** {event_datetime}\n"
+                      f"**Duration:** {duration} minutes\n"
+                      f"**Channel:** {channel.name if channel else 'None'}",
+                inline=False
             )
             await ctx.send(embed=embed)
 
@@ -1007,6 +1035,86 @@ class EventsCog(commands.Cog):
                 color=discord.Color.red()
             )
             await ctx.send(embed=embed)
+
+    @commands.hybrid_command(name="testevent", description="Test Discord event creation with debug info")
+    @app_commands.describe(
+        title="Event title (keep it short)",
+        description="Event description (keep it short)"
+    )
+    async def test_event_creation(self, ctx: commands.Context, title: str = "Test Event", description: str = "Test Description"):
+        """Test event creation with debug information."""
+        
+        # Check permissions first
+        if not ctx.guild.me.guild_permissions.manage_events:
+            await ctx.send("❌ Bot doesn't have Manage Events permission!")
+            return
+        
+        try:
+            # Create a simple event for tomorrow
+            from datetime import timezone
+            import asyncio
+            
+            now = datetime.now(timezone.utc)
+            tomorrow = now + timedelta(days=1)
+            end_time = tomorrow + timedelta(hours=1)  # 1 hour duration
+            
+            # Find a voice channel
+            voice_channels = [ch for ch in ctx.guild.channels if isinstance(ch, discord.VoiceChannel)]
+            
+            if voice_channels:
+                # Try voice channel event
+                await ctx.send(f"🔍 Attempting to create voice channel event in {voice_channels[0].name}...")
+                
+                discord_event = await ctx.guild.create_scheduled_event(
+                    name=title,
+                    description=description,
+                    start_time=tomorrow,
+                    end_time=end_time,
+                    entity_type=discord.EntityType.voice,
+                    channel=voice_channels[0],
+                    privacy_level=discord.PrivacyLevel.guild_only
+                )
+            else:
+                # Try external event
+                await ctx.send("🔍 No voice channels found, creating external event...")
+                
+                discord_event = await ctx.guild.create_scheduled_event(
+                    name=title,
+                    description=description,
+                    start_time=tomorrow,
+                    end_time=end_time,
+                    entity_type=discord.EntityType.external,
+                    location="Test Location",
+                    privacy_level=discord.PrivacyLevel.guild_only
+                )
+            
+            # Success!
+            embed = discord.Embed(
+                title="✅ Test Event Created Successfully!",
+                description=f"Discord event `{discord_event.id}` was created.",
+                color=discord.Color.green()
+            )
+            embed.add_field(
+                name="🔗 Event Link",
+                value=f"https://discord.com/events/{ctx.guild.id}/{discord_event.id}",
+                inline=False
+            )
+            embed.add_field(
+                name="📅 Event Details",
+                value=f"**Start:** {tomorrow.strftime('%Y-%m-%d %H:%M UTC')}\n"
+                      f"**End:** {end_time.strftime('%Y-%m-%d %H:%M UTC')}",
+                inline=False
+            )
+            await ctx.send(embed=embed)
+            
+        except discord.Forbidden as e:
+            await ctx.send(f"❌ Permission error: {e}")
+        except discord.HTTPException as e:
+            await ctx.send(f"❌ Discord API error: {e}")
+        except Exception as e:
+            await ctx.send(f"❌ Unexpected error: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
 
     @commands.hybrid_command(name="eventperms", description="Check bot permissions for creating Discord events")
     async def check_event_permissions(self, ctx: commands.Context):
