@@ -75,8 +75,6 @@ git push origin main
 The bot responds to multiple prefixes:
 - `?` (primary)
 - `!`
-- `n!`
-- `nz!`
 
 ## 📋 Available Commands List
 
@@ -126,6 +124,7 @@ Discord-bot/
 │       ├── fun.py                   # Games & entertainment
 │       ├── moderation.py            # Server management
 │       ├── utils.py                 # Utility commands
+|       ├── events.py                 # Events
 │       ├── pomodoro.py              # Productivity timer
 │       ├── enhanced_help_deployment.py # Help system
 │       └── script_session.py       # Interactive features
@@ -189,4 +188,5 @@ For help and questions:
 
 
 **Ready to deploy! 🚀** Just add your `DISCORD_TOKEN` to GitHub secrets and push to main branch.
+
 
