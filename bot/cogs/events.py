@@ -268,7 +268,7 @@ class EventsCog(commands.Cog):
             logger.error(f"Error parsing datetime: {e}")
             return None
     
-    async def create_discord_event(self, guild: discord.Guild, event_data: EventData) -> Optional[discord.ScheduledEvent]:
+    async def create_discord_event(self, guild: discord.Guild, event_data: EventData, channel: Optional[discord.VoiceChannel] = None) -> Optional[discord.ScheduledEvent]:
         """Create a Discord native scheduled event."""
         try:
             # Check if bot has permission to manage events
@@ -276,16 +276,39 @@ class EventsCog(commands.Cog):
                 logger.warning(f"Bot lacks 'Manage Events' permission in guild {guild.id}")
                 return None
             
+            # Try to find a suitable voice channel for the event
+            voice_channel = None
+            if channel and isinstance(channel, discord.VoiceChannel):
+                voice_channel = channel
+            else:
+                # Find the first available voice channel
+                voice_channels = [ch for ch in guild.channels if isinstance(ch, discord.VoiceChannel)]
+                if voice_channels:
+                    voice_channel = voice_channels[0]
+            
             # Create the Discord scheduled event
-            discord_event = await guild.create_scheduled_event(
-                name=event_data.title,
-                description=event_data.description,
-                start_time=event_data.start_time,
-                end_time=event_data.start_time + timedelta(minutes=event_data.duration_minutes),
-                entity_type=discord.EntityType.external,
-                location="Discord Server Event",
-                privacy_level=discord.PrivacyLevel.guild_only
-            )
+            if voice_channel:
+                # Voice channel event - shows up properly in Discord Events
+                discord_event = await guild.create_scheduled_event(
+                    name=event_data.title,
+                    description=event_data.description,
+                    start_time=event_data.start_time,
+                    end_time=event_data.start_time + timedelta(minutes=event_data.duration_minutes),
+                    entity_type=discord.EntityType.voice,
+                    channel=voice_channel,
+                    privacy_level=discord.PrivacyLevel.guild_only
+                )
+            else:
+                # External event as fallback
+                discord_event = await guild.create_scheduled_event(
+                    name=event_data.title,
+                    description=event_data.description,
+                    start_time=event_data.start_time,
+                    end_time=event_data.start_time + timedelta(minutes=event_data.duration_minutes),
+                    entity_type=discord.EntityType.external,
+                    location="Server Event - Check event details",
+                    privacy_level=discord.PrivacyLevel.guild_only
+                )
             
             logger.info(f"Created Discord event: {discord_event.id} for bot event: {event_data.event_id}")
             return discord_event
@@ -335,14 +358,14 @@ class EventsCog(commands.Cog):
         # Discord Event Status
         if event.discord_event_id:
             embed.add_field(
-                name="🌐 Discord Event",
-                value="✅ Created in server events",
+                name="🌐 Discord Native Event",
+                value=f"✅ [View in Events Tab](https://discord.com/events/{event.guild_id}/{event.discord_event_id})",
                 inline=True
             )
         else:
             embed.add_field(
-                name="🌐 Discord Event",
-                value="❌ Failed to create (check permissions)",
+                name="🌐 Discord Native Event", 
+                value="❌ Not created (check permissions)",
                 inline=True
             )
         
@@ -400,10 +423,12 @@ class EventsCog(commands.Cog):
         description="Event description",
         date="Event date (YYYY-MM-DD, MM/DD/YYYY, or DD/MM/YYYY)",
         time="Event time (HH:MM, H:MM AM/PM)",
-        duration="Duration in minutes (default: 60)"
+        duration="Duration in minutes (default: 60)",
+        channel="Voice channel for the event (optional)"
     )
     async def create_event(self, ctx: commands.Context, title: str, description: str, 
-                          date: str, time: str, duration: int = 60):
+                          date: str, time: str, duration: int = 60, 
+                          channel: Optional[discord.VoiceChannel] = None):
         """Create a new event with the specified details."""
         
         # Parse datetime
@@ -467,7 +492,7 @@ class EventsCog(commands.Cog):
         self.events[event_id] = event
         
         # Create Discord native event
-        discord_event = await self.create_discord_event(ctx.guild, event)
+        discord_event = await self.create_discord_event(ctx.guild, event, channel)
         if discord_event:
             event.discord_event_id = discord_event.id
         
@@ -480,10 +505,14 @@ class EventsCog(commands.Cog):
         # Create success message
         success_message = f"✅ **Event Created Successfully!**\n\n"
         if discord_event:
-            success_message += f"📅 **Discord Event:** Created in server events\n"
-            success_message += f"🔗 **Event Link:** [View in Discord Events](https://discord.com/events/{ctx.guild.id}/{discord_event.id})\n"
+            success_message += f"📅 **Discord Native Event:** ✅ Created and visible in server Events tab\n"
+            success_message += f"🔗 **Direct Link:** https://discord.com/events/{ctx.guild.id}/{discord_event.id}\n"
+            if channel:
+                success_message += f"🔊 **Voice Channel:** {channel.mention}\n"
+            else:
+                success_message += f"🔊 **Voice Channel:** Auto-selected first available\n"
         else:
-            success_message += f"⚠️ **Note:** Could not create Discord server event (missing permissions)\n"
+            success_message += f"⚠️ **Note:** Could not create Discord server event (missing permissions or no voice channels)\n"
         success_message += f"🆔 **Bot Event ID:** `{event_id}`\n"
         success_message += f"⏰ **Reminders:** Will be sent 30 minutes before the event"
         
@@ -492,6 +521,9 @@ class EventsCog(commands.Cog):
         await ctx.send(embed=embed, view=view)
         
         logger.info(f"Event created: {event_id} - {title} by {ctx.author}")
+        if discord_event:
+            logger.info(f"Discord native event created: {discord_event.id}")
+    
     
     @commands.hybrid_command(name="events", description="List upcoming events")
     async def list_events(self, ctx: commands.Context):
@@ -718,6 +750,264 @@ class EventsCog(commands.Cog):
         except Exception as e:
             logger.error(f"Error sending reminder for event {event.event_id}: {e}")
     
+    @commands.hybrid_command(name="discordevent", description="Create a native Discord server event only")
+    @app_commands.describe(
+        title="Event title",
+        description="Event description", 
+        date="Event date (YYYY-MM-DD, MM/DD/YYYY, or DD/MM/YYYY)",
+        time="Event time (HH:MM, H:MM AM/PM)",
+        duration="Duration in minutes (default: 60)",
+        channel="Voice channel for the event (required for native events)"
+    )
+    async def create_discord_only_event(self, ctx: commands.Context, title: str, description: str,
+                                       date: str, time: str, duration: int = 60,
+                                       channel: Optional[discord.VoiceChannel] = None):
+        """Create only a native Discord server event (no bot tracking)."""
+        
+        # Check permissions first
+        if not ctx.guild.me.guild_permissions.manage_events:
+            embed = discord.Embed(
+                title="❌ Missing Permissions",
+                description="I need **Manage Events** permission to create Discord server events.",
+                color=discord.Color.red()
+            )
+            embed.add_field(
+                name="🛠️ How to Fix",
+                value="1. Go to **Server Settings** → **Roles**\n"
+                      "2. Find my role\n"
+                      "3. Enable **Manage Events** permission\n"
+                      "4. Save and try again",
+                inline=False
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        # Parse datetime
+        event_datetime = self.parse_datetime(date, time)
+        if not event_datetime:
+            embed = discord.Embed(
+                title="❌ Invalid Date/Time",
+                description="Please use valid date and time formats:",
+                color=discord.Color.red()
+            )
+            embed.add_field(
+                name="📅 Date Formats",
+                value="• `YYYY-MM-DD` (2025-12-25)\n"
+                      "• `MM/DD/YYYY` (12/25/2025)\n"
+                      "• `DD/MM/YYYY` (25/12/2025)",
+                inline=False
+            )
+            embed.add_field(
+                name="🕒 Time Formats", 
+                value="• `HH:MM` (14:30)\n"
+                      "• `H:MM AM/PM` (2:30 PM)",
+                inline=False
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        # Check if event is in the past
+        if event_datetime < datetime.utcnow():
+            embed = discord.Embed(
+                title="❌ Invalid Date",
+                description="Cannot create events in the past!",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        # Validate duration
+        if duration < 1 or duration > 1440:
+            embed = discord.Embed(
+                title="❌ Invalid Duration", 
+                description="Duration must be between 1 and 1440 minutes (24 hours).",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        # Find voice channel if not provided
+        if not channel:
+            voice_channels = [ch for ch in ctx.guild.channels if isinstance(ch, discord.VoiceChannel)]
+            if voice_channels:
+                channel = voice_channels[0]
+            else:
+                embed = discord.Embed(
+                    title="❌ No Voice Channel",
+                    description="No voice channels found in this server. Voice channel events work best for Discord's native Events tab.",
+                    color=discord.Color.red()
+                )
+                embed.add_field(
+                    name="💡 Tip",
+                    value="Create a voice channel first, or specify one with the `channel` parameter.",
+                    inline=False
+                )
+                await ctx.send(embed=embed)
+                return
+        
+        try:
+            # Create Discord native event
+            end_time = event_datetime + timedelta(minutes=duration)
+            
+            if channel:
+                discord_event = await ctx.guild.create_scheduled_event(
+                    name=title,
+                    description=description,
+                    start_time=event_datetime,
+                    end_time=end_time,
+                    entity_type=discord.EntityType.voice,
+                    channel=channel,
+                    privacy_level=discord.PrivacyLevel.guild_only
+                )
+            else:
+                discord_event = await ctx.guild.create_scheduled_event(
+                    name=title,
+                    description=description,
+                    start_time=event_datetime,
+                    end_time=end_time,
+                    entity_type=discord.EntityType.external,
+                    location="Server Event",
+                    privacy_level=discord.PrivacyLevel.guild_only
+                )
+            
+            # Success embed
+            embed = discord.Embed(
+                title="✅ Discord Event Created!",
+                description=f"**{title}** has been created and is now visible in Discord's Events tab.",
+                color=discord.Color.green()
+            )
+            
+            embed.add_field(
+                name="🕒 Event Time",
+                value=f"{event_datetime.strftime('%Y-%m-%d at %H:%M UTC')}",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="⏱️ Duration",
+                value=f"{duration} minutes",
+                inline=True
+            )
+            
+            if channel:
+                embed.add_field(
+                    name="🔊 Voice Channel",
+                    value=channel.mention,
+                    inline=True
+                )
+            
+            embed.add_field(
+                name="🔗 Direct Link",
+                value=f"https://discord.com/events/{ctx.guild.id}/{discord_event.id}",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="📱 How to Find",
+                value="1. Check the **Events** tab in your server\n"
+                      "2. Look at the server name at the top\n" 
+                      "3. Click on the event to see details and RSVP",
+                inline=False
+            )
+            
+            embed.set_footer(text=f"Event ID: {discord_event.id} | Created by {ctx.author.display_name}")
+            
+            await ctx.send(embed=embed)
+            
+            logger.info(f"Discord native event created: {discord_event.id} - {title} by {ctx.author}")
+            
+        except discord.Forbidden:
+            embed = discord.Embed(
+                title="❌ Permission Error",
+                description="I don't have permission to create events in this server.",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
+        except discord.HTTPException as e:
+            embed = discord.Embed(
+                title="❌ Creation Failed",
+                description=f"Failed to create Discord event: {str(e)}",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Error creating Discord event: {e}")
+            embed = discord.Embed(
+                title="❌ Unexpected Error",
+                description="An unexpected error occurred while creating the event.",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
+
+    @commands.hybrid_command(name="discordevents", description="List all Discord native server events")
+    async def list_discord_events(self, ctx: commands.Context):
+        """List all Discord native server events."""
+        try:
+            # Get all scheduled events from Discord
+            guild_events = ctx.guild.scheduled_events
+            
+            if not guild_events:
+                embed = discord.Embed(
+                    title="📅 No Discord Events",
+                    description="No native Discord events are currently scheduled for this server.",
+                    color=discord.Color.blue()
+                )
+                embed.add_field(
+                    name="💡 Create a Discord Event",
+                    value="Use `/discordevent` to create a native Discord server event!",
+                    inline=False
+                )
+                await ctx.send(embed=embed)
+                return
+            
+            # Filter active events
+            active_events = [event for event in guild_events if event.status not in [discord.EventStatus.completed, discord.EventStatus.cancelled]]
+            
+            embed = discord.Embed(
+                title=f"📅 Discord Server Events ({len(active_events)})",
+                description="All native Discord events visible in the Events tab",
+                color=discord.Color.blue()
+            )
+            
+            for event in active_events[:10]:  # Show up to 10 events
+                status_emoji = {
+                    discord.EventStatus.scheduled: "🟢",
+                    discord.EventStatus.active: "🔴", 
+                    discord.EventStatus.ended: "⚫",
+                    discord.EventStatus.cancelled: "❌"
+                }.get(event.status, "❓")
+                
+                time_str = event.start_time.strftime('%m/%d %H:%M UTC') if event.start_time else "TBD"
+                
+                embed.add_field(
+                    name=f"{status_emoji} {event.name}",
+                    value=f"**ID:** `{event.id}`\n"
+                          f"**Time:** {time_str}\n"
+                          f"**Interested:** {event.user_count or 0}\n"
+                          f"**Link:** [View Event](https://discord.com/events/{ctx.guild.id}/{event.id})",
+                    inline=True
+                )
+            
+            if len(active_events) > 10:
+                embed.set_footer(text=f"Showing first 10 of {len(active_events)} events")
+            
+            embed.add_field(
+                name="📱 How to Access",
+                value="Click on your server name → **Events** tab to see all events with RSVP options",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error listing Discord events: {e}")
+            embed = discord.Embed(
+                title="❌ Error",
+                description="Could not retrieve Discord server events.",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=embed)
+
     @commands.hybrid_command(name="eventperms", description="Check bot permissions for creating Discord events")
     async def check_event_permissions(self, ctx: commands.Context):
         """Check if the bot has permissions to create Discord server events."""

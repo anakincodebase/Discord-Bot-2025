@@ -169,16 +169,21 @@ class DeploymentHelpManager:
         
         # 📅 Events & Calendar
         events = HelpCategory("Events & Calendar", "📅", "Event creation and management system")
-        events.add_command("createevent", "Create a new server event with RSVP", 
-                          "?createevent <title> <description> <date> <time> [duration]",
+        events.add_command("createevent", "Create a new server event with RSVP tracking", 
+                          "?createevent <title> <description> <date> <time> [duration] [channel]",
                           ["?createevent 'Game Night' 'Weekly gaming session' 2025-12-25 19:00 120",
                            "/createevent Party 'Birthday celebration' 12/25/2025 '7:00 PM' 180"])
-        events.add_command("events", "List all upcoming server events", "?events", ["/events"])
-        events.add_command("eventinfo", "Get detailed information about an event", "?eventinfo <event_id>",
+        events.add_command("discordevent", "Create ONLY a native Discord server event (appears in Events tab)", 
+                          "?discordevent <title> <description> <date> <time> [duration] [channel]",
+                          ["?discordevent 'Movie Night' 'Weekly movie session' 2025-12-25 20:00 180",
+                           "/discordevent Meeting 'Team sync' 08/15/2025 '2:00 PM' 60"])
+        events.add_command("events", "List all upcoming bot-managed events with RSVP", "?events", ["/events"])
+        events.add_command("discordevents", "List all native Discord server events", "?discordevents", ["/discordevents"])
+        events.add_command("eventinfo", "Get detailed information about a bot event", "?eventinfo <event_id>",
                           ["?eventinfo abc123", "/eventinfo def456"])
-        events.add_command("cancelevent", "Cancel an event (creator/admin only)", "?cancelevent <event_id>",
+        events.add_command("cancelevent", "Cancel a bot-managed event (creator/admin only)", "?cancelevent <event_id>",
                           ["?cancelevent abc123"], permissions="Event Creator or Administrator")
-        events.add_command("eventperms", "Check bot permissions for Discord events", "?eventperms",
+        events.add_command("eventperms", "Check bot permissions for Discord native events", "?eventperms",
                           ["?eventperms"], permissions="Anyone")
         events.add_feature("🎯 RSVP system with ✅ Attending, ❓ Maybe, ❌ Not Attending")
         events.add_feature("⏰ Automatic reminders 30 minutes before events")
@@ -187,8 +192,10 @@ class DeploymentHelpManager:
         events.add_feature("🔔 Event notifications and updates")
         events.add_feature("🎮 Interactive buttons for quick RSVP")
         events.add_feature("📝 Event duration tracking and management")
-        events.add_feature("🌐 Creates Discord native server events")
-        events.add_feature("🔗 Integration with Discord Events tab")
+        events.add_feature("🌐 Creates Discord native server events (appears in Events tab)")
+        events.add_feature("🔗 Integration with Discord Events tab for RSVPs")
+        events.add_feature("🎭 Two event types: Bot-tracked (with features) or Discord-only (native)")
+        events.add_feature("🔊 Voice channel integration for better Discord event visibility")
         self.categories["events"] = events
     
     def get_category(self, category_key: str) -> Optional[HelpCategory]:
@@ -273,7 +280,7 @@ class HelpView(discord.ui.View):
         
         embed.add_field(
             name="🚀 Popular Commands",
-            value="`?hangman` • `?trivia` • `?createevent` • `?poll` • `?def`",
+            value="`?hangman` • `?trivia` • `?discordevent` • `?poll` • `?def`",
             inline=False
         )
         
